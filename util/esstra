@@ -129,9 +129,9 @@ class MetadataHandler:
             fp.write(raw_data)
             fp.flush()
 
-            result = self.__run_command(
-                f'objcopy {binary_path} '
-                f'--update-section {SECTION_NAME}={fp.name}')
+            result = self.__run_command([
+                'objcopy', binary_path,
+                '--update-section', f'{SECTION_NAME}={fp.name}'])
 
             if result.returncode:
                 raise RuntimeError(
@@ -151,7 +151,7 @@ class MetadataHandler:
                 binary_path, backup_suffix, overwrite_backup)
 
         result = self.__run_command(
-            f'objcopy -R{SECTION_NAME} {binary_path}')
+            ['objcopy', f'-R{SECTION_NAME}', binary_path])
 
         if result.returncode:
             raise RuntimeError(
@@ -250,9 +250,9 @@ class MetadataHandler:
         return self._raw_data.decode(encoding='utf-8')
 
     # private
-    def __run_command(self, command_line):
+    def __run_command(self, args):
         return subprocess.run(
-            command_line, capture_output=True, shell=True, encoding='utf-8')
+            args, capture_output=True, encoding='utf-8')
 
     def __get_system_header_paths(self):
         def extract_search_paths(lines):
@@ -270,12 +270,12 @@ class MetadataHandler:
                     paths.append(line.strip())
             return paths
 
-        result = self.__run_command('gcc -xc -E -v /dev/null')
+        result = self.__run_command(['gcc', '-xc', '-E', '-v', '/dev/null'])
         if result.returncode:
             raise RuntimeError('could not obtain system header paths')
         c_paths = extract_search_paths(result.stderr.splitlines())
 
-        result = self.__run_command('gcc -xc++ -E -v /dev/null')
+        result = self.__run_command(['gcc', '-xc++', '-E', '-v', '/dev/null'])
         if result.returncode:
             raise RuntimeError('could not obtain system header paths')
         cpp_paths = extract_search_paths(result.stderr.splitlines())
@@ -289,22 +289,21 @@ class MetadataHandler:
         return False
 
     def __exists_metadata(self, bianry_path):
-        result = self.__run_command(
-            f'readelf -SW {bianry_path} | fgrep {SECTION_NAME}')
+        result = self.__run_command(['readelf', '-SW', bianry_path])
 
         if result.returncode:
             return False
 
-        return True
+        return SECTION_NAME in result.stdout
 
     def __extract_metadata(self, binary_path):
         if not self.__exists_metadata(binary_path):
             raise RuntimeError(f'section not found: {SECTION_NAME!r}')
 
         with tempfile.NamedTemporaryFile('wb', delete=False) as temp:
-            result = self.__run_command(
-                f'objcopy --dump-section '
-                f'{SECTION_NAME}={temp.name} {binary_path}')
+            result = self.__run_command([
+                'objcopy', '--dump-section',
+                f'{SECTION_NAME}={temp.name}', binary_path])
 
         if result.returncode:
             raise RuntimeError(
@@ -406,7 +405,7 @@ class MetadataHandler:
         if not overwrite_backup and Path(backup_path).exists():
             raise RuntimeError(f'file already exists: {backup_path!r}')
 
-        result = self.__run_command(f'cp -a {binary_path} {backup_path}')
+        result = self.__run_command(['cp', '-a', binary_path, backup_path])
 
         if result.returncode:
             raise RuntimeError(f'cp returned code {result.returncode} '

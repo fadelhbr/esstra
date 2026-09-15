@@ -106,8 +106,8 @@ oncleanup(void)
             if (exitcode == 0) {
                 message(L_INFO, "[%s] metadata in '%s' successfully updated", tool_name, link_output_name);
             } else {
-                message(L_ERROR, "[%s] ESSTRA Utility failed with code %d",
-                        tool_name, link_output_name, exitcode);
+                message(L_ERROR, "[%s] ESSTRA Utility failed with code %d on '%s'",
+                        tool_name, exitcode, link_output_name);
                 retcode = LDPS_ERR;
             }
         }
@@ -122,7 +122,7 @@ enum ld_plugin_status
 onload(struct ld_plugin_tv *tv)
 {
     struct ld_plugin_tv *p;
-    enum ld_plugin_status status;
+    enum ld_plugin_status status = LDPS_OK;
     ld_plugin_register_cleanup register_cleanup = NULL;
 
     p = tv;

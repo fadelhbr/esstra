@@ -2,9 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <stdio.h>
+#include <stdint.h>
 #include <limits.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <unistd.h>
+#include <sys/stat.h>
 #include <libgen.h>
 
 #include <string>
@@ -125,6 +128,33 @@ bytes_to_string(uint8_t* bytes, unsigned size) {
 }
 
 /*
+ * escape a string so it can be emitted as a .ascii literal
+ */
+static string
+escape_for_asm(const string& text) {
+    string escaped;
+    for (char c : text) {
+        if (c == '\\' || c == '"') escaped += '\\';
+        escaped += c;
+    }
+    return escaped;
+}
+
+/*
+ * quote a string as a YAML single-quoted scalar
+ */
+static string
+escape_for_yaml(const string& text) {
+    string escaped = "'";
+    for (char c : text) {
+        if (c == '\'') escaped += "''";
+        else escaped += c;
+    }
+    escaped += "'";
+    return escaped;
+}
+
+/*
  * check if specified algorithm is supported
  */
 static bool
@@ -228,20 +258,38 @@ collect_paths(void* gcc_data, void* /* user_data */) {
     // calc checksum
 
     int fd = open(resolved, O_RDONLY);
-    if (fd == 0) {
-        perror("open() failed");
+    if (fd < 0) {
+        perror((path + ": open() failed").c_str());
         return;
     }
 
     struct stat filestat;
     if (fstat(fd, &filestat) < 0) {
         perror((path + ": fstat() failed").c_str());
+        close(fd);
         return;
     }
     ssize_t st_size = (ssize_t)filestat.st_size;
 
+    // the hash functions take a 32-bit size, so refuse files that would truncate
+    if (st_size > (ssize_t)UINT32_MAX) {
+        fprintf(stderr, "%s: file too large to hash: %zd bytes\n", resolved, st_size);
+        close(fd);
+        return;
+    }
+
     uint8_t* buffer = new uint8_t[st_size];
-    ssize_t size = read(fd, buffer, st_size);
+    ssize_t size = 0;
+    while (size < st_size) {
+        ssize_t n = read(fd, buffer + size, st_size - size);
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            perror((path + ": read() failed").c_str());
+            break;
+        }
+        if (n == 0) break;
+        size += n;
+    }
     close(fd);
 
     if (size != st_size) {
@@ -283,7 +331,7 @@ create_section(void* /* gcc_data */, void* /* user_data */) {
     strings_to_embed.push_back(yaml_indent + key_tool_name + ": " + tool_name);
     strings_to_embed.push_back(yaml_indent + key_tool_version + ": " + tool_version);
     strings_to_embed.push_back(yaml_indent + key_data_format_version + ": " + data_format_version);
-    strings_to_embed.push_back(yaml_indent + key_input_filename + ": " + main_input_filename);
+    strings_to_embed.push_back(yaml_indent + key_input_filename + ": " + escape_for_yaml(main_input_filename));
 
     // source files
     if (allpaths.size() == 0) {
@@ -307,11 +355,11 @@ create_section(void* /* gcc_data */, void* /* user_data */) {
             string substituted = substitute_path_prefix(directory);
             message(L_DEBUG, "directory: '%s' => '%s'", directory.c_str(), substituted.c_str());
             // ---
-            strings_to_embed.push_back(yaml_item + key_directory + ": " + substituted);
+            strings_to_embed.push_back(yaml_item + key_directory + ": " + escape_for_yaml(substituted));
             strings_to_embed.push_back(yaml_indent + key_files + ":");
             for (const auto& filename : dir_to_files[directory]) {
                 message(L_DEBUG, "dir: %s", directory.c_str());
-                strings_to_embed.push_back(yaml_indent + yaml_item + key_file + ": " + filename);
+                strings_to_embed.push_back(yaml_indent + yaml_item + key_file + ": " + escape_for_yaml(filename));
                 string path = directory + "/" + filename;
                 for (const auto& elem : infomap[path]) {
                     strings_to_embed.push_back(
@@ -331,7 +379,7 @@ create_section(void* /* gcc_data */, void* /* user_data */) {
     // add assembly code
     fprintf(asm_out_file, "\t.pushsection %s\n", section_name.c_str());
     for (const auto& item : strings_to_embed) {
-        fprintf(asm_out_file, "\t.ascii \"%s\\n\"\n", item.c_str());
+        fprintf(asm_out_file, "\t.ascii \"%s\\n\"\n", escape_for_asm(item).c_str());
     }
     fprintf(asm_out_file, "\t.popsection\n");
 
