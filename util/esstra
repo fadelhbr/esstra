@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: MIT
 
 from abc import ABC, abstractmethod
+from functools import cached_property
 import os
 import sys
 import argparse
@@ -97,9 +98,6 @@ class MetadataHandler:
         if not Path(binary_path).is_file():
             raise RuntimeError(f'not a file: {binary_path!r}')
 
-        self._system_header_paths = self.__get_system_header_paths()
-        msg.debug(f'* system header paths: {self._system_header_paths!r}')
-
         self._binary_path = binary_path
         self._raw_data = self.__extract_metadata(binary_path)
         self._parsed_data = self.__decode_metadata(self._raw_data)
@@ -157,10 +155,6 @@ class MetadataHandler:
             raise RuntimeError(
                 f'objcopy returned code {result.returncode} '
                 f'with output {result.stderr!r}')
-
-        if len(result.stderr):
-            raise RuntimeError(
-                f'objcopy returned with output: {result.stderr!r}')
 
         return True
 
@@ -254,7 +248,8 @@ class MetadataHandler:
         return subprocess.run(
             args, capture_output=True, encoding='utf-8')
 
-    def __get_system_header_paths(self):
+    @cached_property
+    def _system_header_paths(self):
         def extract_search_paths(lines):
             START_MARK = '<...> search starts here'
             END_MARK = 'End of search list'
@@ -827,8 +822,10 @@ class CommandUpdate(CommandBase):
                 spdx_fileinfo = spdx_info.get_fileinfo(filepath, checksum)
                 if not spdx_fileinfo:
                     continue
-                license_info = spdx_fileinfo[
-                    SpdxTagValueInfo.TAG_LICENSE_INFO_IN_FILE]
+                license_info = spdx_fileinfo.get(
+                    SpdxTagValueInfo.TAG_LICENSE_INFO_IN_FILE)
+                if not license_info:
+                    continue
                 fileinfo[MetadataHandler.KEY_LICENSE_INFO] = license_info
 
             try:

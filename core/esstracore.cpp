@@ -510,7 +510,7 @@ plugin_init(struct plugin_name_args* plugin_info,
             messages_to_show |= L_ERROR | L_NOTICE | L_INFO;
             message(L_DEBUG, "verbose mode enabled");
         } else if (strcmp(argv->key, "silent") == 0) {
-            messages_to_show &= ~(L_ERROR | L_INFO | L_DEBUG);
+            messages_to_show &= ~(L_ERROR | L_NOTICE | L_INFO | L_DEBUG);
             message(L_DEBUG, "silent mode enabled");
         } else if (strcmp(argv->key, "show-error") == 0) {
             messages_to_show |= L_ERROR;

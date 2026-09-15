@@ -99,8 +99,10 @@ oncleanup(void)
         exit(1);
     } else {
         int status;
-        waitpid(pid, &status, 0);
-        if (WIFEXITED(status)) {
+        if (waitpid(pid, &status, 0) < 0) {
+            message(L_ERROR, "[%s] waitpid failed: %s", tool_name, strerror_r(errno, buf, sizeof(buf)));
+            retcode = LDPS_ERR;
+        } else if (WIFEXITED(status)) {
             int exitcode = WEXITSTATUS(status);
             message(L_DEBUG, "> 'esstra shrink' exited with code %d", exitcode);
             if (exitcode == 0) {
@@ -110,6 +112,10 @@ oncleanup(void)
                         tool_name, exitcode, link_output_name);
                 retcode = LDPS_ERR;
             }
+        } else {
+            message(L_ERROR, "[%s] ESSTRA Utility terminated abnormally on '%s'",
+                    tool_name, link_output_name);
+            retcode = LDPS_ERR;
         }
     }
     return retcode;
@@ -158,7 +164,7 @@ onload(struct ld_plugin_tv *tv)
                 messages_to_show |= L_ERROR | L_NOTICE | L_INFO;
                 message(L_DEBUG, "> verbose mode enabled");
             } else if (strcmp(option, "silent") == 0) {
-                messages_to_show &= ~(L_ERROR | L_INFO | L_DEBUG);
+                messages_to_show &= ~(L_ERROR | L_NOTICE | L_INFO | L_DEBUG);
                 message(L_DEBUG, "> silent mode enabled");
             } else if (strcmp(option, "show-error") == 0) {
                 messages_to_show |= L_ERROR;
