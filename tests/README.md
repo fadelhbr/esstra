@@ -114,6 +114,13 @@ The following test cases are included for Esstra Core:
 
 ### Esstra Utility
 
+#### Esstra (global options)
+
+The following test cases are included for the `esstra` global options:
+
+1. Version output via `-V`
+1. Version output via `--version`
+
 #### Esstra show
 
 The following test cases are included for `esstra show`:
@@ -141,6 +148,9 @@ The following test cases are included for `esstra shrink`:
 1. Handling of non-existent files
 1. Shrink on binary without esstra metadata
 1. Error handling with ignore-errors option
+1. Shrink with a file-prefix-map substitution rule
+1. Shrink with the auto file-prefix-map mode
+1. Shrink with dry-run leaving the binary unchanged
 
 
 #### Esstra update

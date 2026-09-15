@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 import pytest
+import shutil
 
 from pathlib import Path
 
@@ -10,6 +11,14 @@ from conftest import run_command
 ESSTRA_CORE = 'esstracore.so'
 TEST_DIR = 'test_binaries'
 ESSTRA_UTIL = 'util/esstra'
+
+
+def create_test_copy(setup_test_files, suffix='_shrink_test'):
+    '''Copy the test binary so shrink tests do not mutate shared fixtures'''
+    org_binary = setup_test_files['with_metadata']
+    binary = org_binary + suffix
+    shutil.copy(org_binary, binary)
+    return binary
 
 
 @pytest.mark.shrink_test(serial="01")
@@ -198,4 +207,66 @@ def test_shrink_with_ignore_errors(setup_test_files):
     assert return_code == 0
     assert 'failed to update metadata' in stderr
     assert 'errors ignored.' in stderr
+
+
+@pytest.mark.shrink_test(serial="10")
+def test_shrink_with_file_prefix_map_rule(setup_test_files):
+    '''Verify 'esstra shrink' with a file-prefix-map substitution rule
+
+    Command:
+        $ python3 esstra.py shrink --file-prefix-map <from>:<to> binary
+        $ python3 esstra.py show binary
+
+    Expected Behavior:
+        Source directories and binary path are rewritten using the rule,
+        while unrelated (system) directories are left untouched.
+    '''
+    binary = create_test_copy(setup_test_files)
+    source_dir = str(Path(setup_test_files['with_metadata']).resolve().parent)
+    cmd = (f'{ESSTRA_UTIL} shrink --file-prefix-map "{source_dir}:/src" '
+           f'{binary} && {ESSTRA_UTIL} show {binary}')
+    stdout, stderr, return_code = run_command(cmd)
+    assert return_code == 0
+    assert 'Directory: /src' in stdout
+    assert f'BinaryFile: /src/{Path(binary).name}' in stdout
+
+
+@pytest.mark.shrink_test(serial="11")
+def test_shrink_with_file_prefix_map_auto(setup_test_files):
+    '''Verify 'esstra shrink' with the auto file-prefix-map mode
+
+    Command:
+        $ python3 esstra.py shrink --file-prefix-map auto:/src binary
+        $ python3 esstra.py show binary
+
+    Expected Behavior:
+        The source directory is relativized under the given top directory.
+        System header directories are not affected.
+    '''
+    binary = create_test_copy(setup_test_files)
+    cmd = (f'{ESSTRA_UTIL} shrink --file-prefix-map auto:/src {binary} && '
+           f'{ESSTRA_UTIL} show {binary}')
+    stdout, stderr, return_code = run_command(cmd)
+    assert return_code == 0
+    assert 'Directory: /src' in stdout
+    assert f'BinaryFile: /src/{Path(binary).name}' in stdout
+
+
+@pytest.mark.shrink_test(serial="12")
+def test_shrink_with_dry_run(setup_test_files):
+    '''Verify 'esstra shrink' with --dry-run does not modify the binary
+
+    Command:
+        $ python3 esstra.py shrink --dry-run --file-prefix-map auto binary
+
+    Expected Behavior:
+        A notice is printed and the binary content is left unchanged.
+    '''
+    binary = create_test_copy(setup_test_files)
+    content_before = Path(binary).read_bytes()
+    cmd = (f'{ESSTRA_UTIL} shrink --dry-run --file-prefix-map auto {binary}')
+    stdout, stderr, return_code = run_command(cmd)
+    assert return_code == 0
+    assert 'binary not updated' in stderr
+    assert Path(binary).read_bytes() == content_before
 
